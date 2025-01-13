@@ -9,7 +9,7 @@ window.addEventListener("load", () => {
   const context = canvas.getContext("2d");
 
   let targetPos = { x: 2, y: 2 };
-  let playerPos = { x: 5, y: 5 };
+  let playerPos = { x: 7.5, y: 7.5 };
   let playerVelocity = { x: 0, y: 0 };
   let isDragging = false;
   let dragPos = { x: 0, y: 0 };
@@ -19,6 +19,8 @@ window.addEventListener("load", () => {
   let remainingShots = 0;
   let isBallStopped = true;
   let isGameRunning = true;
+  let level = 1;
+  let obstacles = [];
 
   const BOUNCE = 0.8; // Bounce coefficient
   const FRICTION = 0.7; // Normal friction
@@ -35,15 +37,16 @@ window.addEventListener("load", () => {
   const SHOT_IND_COLOR = "rgba(255, 255, 255, 0.75)";
   const MAX_DRAG_DISTANCE = 4.2; // 5 units based on the 10x10 grid;
   const playerImage = new Image();
-  const SHOTS_PER_LEVEL = 3;
+  const SHOTS_PER_LEVEL = 4;
+  const MAX_NUM_OBSTACLES = 10;
 
   const gameOverOverlay = document.getElementById("overlay");
   const gameOverlayMessage = document.getElementById("overlay-message");
   const restartButton = document.getElementById("restart-button");
   const continueButton = document.getElementById("next-button");
   const remainingShotsContainer = document.getElementById("remaining-shots");
-  restartButton.addEventListener("click", restartGame);
-  continueButton.addEventListener("click", restartGame);
+  restartButton.addEventListener("click", gameOver);
+  continueButton.addEventListener("click", nextLevel);
 
   /************************/
   /**** Initial Setup *****/
@@ -51,14 +54,9 @@ window.addEventListener("load", () => {
 
   remainingShots = SHOTS_PER_LEVEL;
   playerImage.src = "/assets/golf_ball.png";
+  restartGame();
   resizeCanvas();
   requestAnimationFrame(gameLoop);
-
-  /**
-   * TODO:
-   * - add obstacles to avoid
-   * - add random course generation stuff
-   */
 
   /************************/
   /****** Game Loop *******/
@@ -84,6 +82,7 @@ window.addEventListener("load", () => {
     drawBackground();
 
     drawTarget();
+    drawObstacles();
 
     if (hasHitTarget) {
       if (playerOpacity > 0.01) {
@@ -91,7 +90,7 @@ window.addEventListener("load", () => {
       } else {
         isGameRunning = false;
         gameOverOverlay.classList.remove("hidden");
-        gameOverlayMessage.textContent = "Level Complete!";
+        gameOverlayMessage.textContent = "Level " + level + " Complete!";
         restartButton.classList.add("hidden");
         continueButton.classList.remove("hidden");
       }
@@ -123,8 +122,91 @@ window.addEventListener("load", () => {
     updateRemainingShots();
   }
 
+  function generateLevel() {
+    // Randomize target position considering target radius
+    const minPos = TARGET_RADIUS;
+    const maxPos = 10 - TARGET_RADIUS;
+    targetPos = {
+      x: minPos + Math.random() * (maxPos - minPos),
+      y: minPos + Math.random() * (maxPos - minPos),
+    };
+
+    // Randomize obstacles
+    obstacles = [];
+    const maxObstacles = Math.min(Math.floor(level / 2), MAX_NUM_OBSTACLES);
+    const maxObstacleSize = Math.min(level, 5);
+    for (let i = 0; i < maxObstacles; i++) {
+      let obstacle;
+      let isValidPosition = false;
+
+      for (let attempts = 0; attempts < 10; attempts++) {
+        const size = 1 + Math.floor(Math.random() * maxObstacleSize);
+        const isVertical = Math.random() < 0.5;
+        obstacle = {
+          x: Math.floor(Math.random() * 10),
+          y: Math.floor(Math.random() * 10),
+          width: isVertical ? 1 : size,
+          height: isVertical ? size : 1,
+        };
+
+        const targetSquare = {
+          x: targetPos.x - TARGET_RADIUS,
+          y: targetPos.y - TARGET_RADIUS,
+          width: TARGET_RADIUS * 2,
+          height: TARGET_RADIUS * 2,
+        };
+
+        isValidPosition =
+          obstacle.x + obstacle.width < targetSquare.x ||
+          obstacle.x > targetSquare.x + targetSquare.width ||
+          obstacle.y + obstacle.height < targetSquare.y ||
+          obstacle.y > targetSquare.y + targetSquare.height;
+
+        if (isValidPosition) {
+          obstacles.push(obstacle);
+          break;
+        }
+      }
+    }
+
+    // Randomize player position
+    let isValidPosition = false;
+
+    while (!isValidPosition) {
+      playerPos = {
+        x: Math.random() * 10,
+        y: Math.random() * 10,
+      };
+
+      const distanceToTarget = Math.sqrt(
+        Math.pow(playerPos.x - targetPos.x, 2) +
+          Math.pow(playerPos.y - targetPos.y, 2)
+      );
+
+    const intersectsObstacle = obstacles.some((obstacle) => {
+      return (
+        playerPos.x + BALL_RADIUS > obstacle.x &&
+        playerPos.x - BALL_RADIUS < obstacle.x + obstacle.width &&
+        playerPos.y + BALL_RADIUS > obstacle.y &&
+        playerPos.y - BALL_RADIUS < obstacle.y + obstacle.height
+      );
+      });
+
+      const intersectsWall =
+        playerPos.x < BALL_RADIUS ||
+        playerPos.x > 10 - BALL_RADIUS ||
+        playerPos.y < BALL_RADIUS ||
+        playerPos.y > 10 - BALL_RADIUS;
+
+      isValidPosition =
+        distanceToTarget >= MAX_DRAG_DISTANCE &&
+        !intersectsObstacle &&
+        !intersectsWall;
+    }
+  }
+
   function restartGame() {
-    playerPos = { x: 5, y: 5 };
+    generateLevel();
     playerVelocity = { x: 0, y: 0 };
     isDragging = false;
     dragPos = { x: 0, y: 0 };
@@ -136,6 +218,16 @@ window.addEventListener("load", () => {
     lastTime = performance.now();
     gameOverOverlay.classList.add("hidden");
     requestAnimationFrame(gameLoop);
+  }
+
+  function nextLevel() {
+    level++;
+    restartGame();
+  }
+
+  function gameOver() {
+    level = 1;
+    restartGame();
   }
 
   /************************/
@@ -188,6 +280,43 @@ window.addEventListener("load", () => {
       playerPos.y = 10 - BALL_RADIUS;
       playerVelocity.y = -Math.abs(playerVelocity.y) * BOUNCE;
     }
+
+    // handle obstacle collisions
+    obstacles.forEach((obstacle) => {
+      const closestX = Math.max(
+        obstacle.x,
+        Math.min(playerPos.x, obstacle.x + obstacle.width)
+      );
+      const closestY = Math.max(
+        obstacle.y,
+        Math.min(playerPos.y, obstacle.y + obstacle.height)
+      );
+      const distanceX = playerPos.x - closestX;
+      const distanceY = playerPos.y - closestY;
+      const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+
+      if (distance < BALL_RADIUS) {
+        // Calculate the normal vector
+        const normalX = distanceX / distance;
+        const normalY = distanceY / distance;
+
+        // Calculate the dot product of the velocity and the normal
+        const dotProduct =
+          playerVelocity.x * normalX + playerVelocity.y * normalY;
+
+        // Reflect the velocity vector
+        playerVelocity.x -= 2 * dotProduct * normalX;
+        playerVelocity.y -= 2 * dotProduct * normalY;
+
+        // Apply bounce coefficient
+        playerVelocity.x *= BOUNCE;
+        playerVelocity.y *= BOUNCE;
+
+        // Adjust the position to avoid sticking to the obstacle
+        playerPos.x = closestX + normalX * BALL_RADIUS;
+        playerPos.y = closestY + normalY * BALL_RADIUS;
+      }
+    });
 
     // target checks
     const dx = playerPos.x - targetPos.x;
@@ -353,6 +482,16 @@ window.addEventListener("load", () => {
     );
     context.closePath();
     context.fill();
+  }
+
+  function drawObstacles() {
+    context.fillStyle = "brown";
+    obstacles.forEach((obstacle) => {
+      const canvasPos = gridToCanvas(obstacle.x, obstacle.y);
+      const width = (obstacle.width / 10) * canvas.width;
+      const height = (obstacle.height / 10) * canvas.height;
+      context.fillRect(canvasPos.x, canvasPos.y, width, height);
+    });
   }
 
   /************************/
