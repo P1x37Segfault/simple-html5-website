@@ -19,17 +19,17 @@ window.addEventListener("load", () => {
   let remainingShots = 0;
   let isBallStopped = true;
   let isGameRunning = true;
-  let level = 1;
+  let level = 10;
   let obstacles = [];
 
-  const BOUNCE = 0.8; // Bounce coefficient
+  const BOUNCE = 0.9; // Bounce coefficient
   const FRICTION = 0.7; // Normal friction
-  const BALL_RADIUS = 0.5; // Will be set in resizeCanvas
+  const BALL_RADIUS = 0.45; // Will be set in resizeCanvas
   const TARGET_RADIUS = 0.75;
   const TARGET_PULL_FORCE = 21; // Force applied towards the target
   const GRASS_FRICTION = 0.95; // Higher friction for slow speeds
   const CRITICAL_SPEED = 2; // Speed threshold where grass friction kicks in
-  const MAX_SHOT_SPEED = 42;
+  const MAX_SHOT_SPEED = 30;
   const VELOCITY_THRESHOLD = 0.1; // Threshold for considering ball "stopped"
   const TARGET_THRESHOLD = 0.2; // Threshold for hitting the target
   const TRAIL_LENGTH = 50; // Number of positions to remember
@@ -45,6 +45,7 @@ window.addEventListener("load", () => {
   const restartButton = document.getElementById("restart-button");
   const continueButton = document.getElementById("next-button");
   const remainingShotsContainer = document.getElementById("remaining-shots");
+  const currentLevelDisplay = document.getElementById("current-level");
   restartButton.addEventListener("click", gameOver);
   continueButton.addEventListener("click", nextLevel);
 
@@ -120,90 +121,86 @@ window.addEventListener("load", () => {
     }
 
     updateRemainingShots();
+    currentLevelDisplay.textContent = "Level: " + level;
   }
 
-  function generateLevel() {
+function generateLevel() {
     // Randomize target position considering target radius
     const minPos = TARGET_RADIUS;
     const maxPos = 10 - TARGET_RADIUS;
     targetPos = {
-      x: minPos + Math.random() * (maxPos - minPos),
-      y: minPos + Math.random() * (maxPos - minPos),
+        x: minPos + Math.random() * (maxPos - minPos),
+        y: minPos + Math.random() * (maxPos - minPos),
     };
+
+    // Randomize player position
+    let isValidPosition = false;
+
+    while (!isValidPosition) {
+        playerPos = {
+            x: Math.random() * 10,
+            y: Math.random() * 10,
+        };
+
+        const distanceToTarget = Math.sqrt(
+            Math.pow(playerPos.x - targetPos.x, 2) +
+                Math.pow(playerPos.y - targetPos.y, 2)
+        );
+
+        const intersectsWall =
+            playerPos.x < BALL_RADIUS ||
+            playerPos.x > 10 - BALL_RADIUS ||
+            playerPos.y < BALL_RADIUS ||
+            playerPos.y > 10 - BALL_RADIUS;
+
+        isValidPosition =
+            distanceToTarget >= MAX_DRAG_DISTANCE && !intersectsWall;
+    }
 
     // Randomize obstacles
     obstacles = [];
     const maxObstacles = Math.min(Math.floor(level / 2), MAX_NUM_OBSTACLES);
     const maxObstacleSize = Math.min(level, 5);
     for (let i = 0; i < maxObstacles; i++) {
-      let obstacle;
-      let isValidPosition = false;
+        let obstacle;
+        let isValidPosition = false;
 
-      for (let attempts = 0; attempts < 10; attempts++) {
-        const size = 1 + Math.floor(Math.random() * maxObstacleSize);
-        const isVertical = Math.random() < 0.5;
-        obstacle = {
-          x: Math.floor(Math.random() * 10),
-          y: Math.floor(Math.random() * 10),
-          width: isVertical ? 1 : size,
-          height: isVertical ? size : 1,
-        };
+        for (let attempts = 0; attempts < 10; attempts++) {
+            const size = 1 + Math.floor(Math.random() * maxObstacleSize);
+            const isVertical = Math.random() < 0.5;
+            obstacle = {
+                x: Math.floor(Math.random() * 10),
+                y: Math.floor(Math.random() * 10),
+                width: isVertical ? 1 : size,
+                height: isVertical ? size : 1,
+            };
 
-        const targetSquare = {
-          x: targetPos.x - TARGET_RADIUS,
-          y: targetPos.y - TARGET_RADIUS,
-          width: TARGET_RADIUS * 2,
-          height: TARGET_RADIUS * 2,
-        };
+            const targetSquare = {
+                x: targetPos.x - TARGET_RADIUS,
+                y: targetPos.y - TARGET_RADIUS,
+                width: TARGET_RADIUS * 2,
+                height: TARGET_RADIUS * 2,
+            };
 
-        isValidPosition =
-          obstacle.x + obstacle.width < targetSquare.x ||
-          obstacle.x > targetSquare.x + targetSquare.width ||
-          obstacle.y + obstacle.height < targetSquare.y ||
-          obstacle.y > targetSquare.y + targetSquare.height;
+            const intersectsObstacle =
+                playerPos.x + BALL_RADIUS > obstacle.x &&
+                playerPos.x - BALL_RADIUS < obstacle.x + obstacle.width &&
+                playerPos.y + BALL_RADIUS > obstacle.y &&
+                playerPos.y - BALL_RADIUS < obstacle.y + obstacle.height;
 
-        if (isValidPosition) {
-          obstacles.push(obstacle);
-          break;
+            isValidPosition =
+                obstacle.x + obstacle.width < targetSquare.x ||
+                obstacle.x > targetSquare.x + targetSquare.width ||
+                obstacle.y + obstacle.height < targetSquare.y ||
+                obstacle.y > targetSquare.y + targetSquare.height;
+
+            if (isValidPosition && !intersectsObstacle) {
+                obstacles.push(obstacle);
+                break;
+            }
         }
-      }
     }
-
-    // Randomize player position
-    let isValidPosition = false;
-
-    while (!isValidPosition) {
-      playerPos = {
-        x: Math.random() * 10,
-        y: Math.random() * 10,
-      };
-
-      const distanceToTarget = Math.sqrt(
-        Math.pow(playerPos.x - targetPos.x, 2) +
-          Math.pow(playerPos.y - targetPos.y, 2)
-      );
-
-    const intersectsObstacle = obstacles.some((obstacle) => {
-      return (
-        playerPos.x + BALL_RADIUS > obstacle.x &&
-        playerPos.x - BALL_RADIUS < obstacle.x + obstacle.width &&
-        playerPos.y + BALL_RADIUS > obstacle.y &&
-        playerPos.y - BALL_RADIUS < obstacle.y + obstacle.height
-      );
-      });
-
-      const intersectsWall =
-        playerPos.x < BALL_RADIUS ||
-        playerPos.x > 10 - BALL_RADIUS ||
-        playerPos.y < BALL_RADIUS ||
-        playerPos.y > 10 - BALL_RADIUS;
-
-      isValidPosition =
-        distanceToTarget >= MAX_DRAG_DISTANCE &&
-        !intersectsObstacle &&
-        !intersectsWall;
-    }
-  }
+}
 
   function restartGame() {
     generateLevel();
@@ -484,15 +481,18 @@ window.addEventListener("load", () => {
     context.fill();
   }
 
-  function drawObstacles() {
-    context.fillStyle = "brown";
+function drawObstacles() {
+    context.fillStyle = "grey";
+    context.strokeStyle = "black";
+    context.lineWidth = 2;
     obstacles.forEach((obstacle) => {
-      const canvasPos = gridToCanvas(obstacle.x, obstacle.y);
-      const width = (obstacle.width / 10) * canvas.width;
-      const height = (obstacle.height / 10) * canvas.height;
-      context.fillRect(canvasPos.x, canvasPos.y, width, height);
+        const canvasPos = gridToCanvas(obstacle.x, obstacle.y);
+        const width = (obstacle.width / 10) * canvas.width;
+        const height = (obstacle.height / 10) * canvas.height;
+        context.fillRect(canvasPos.x, canvasPos.y, width, height);
+        context.strokeRect(canvasPos.x, canvasPos.y, width, height);
     });
-  }
+}
 
   /************************/
   /**** Input Handling ****/
