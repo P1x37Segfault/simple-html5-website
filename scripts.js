@@ -1,4 +1,4 @@
-window.addEventListener("load", () => {
+window.addEventListener("DOMContentLoaded", () => {
   /************************/
   /****** Variables *******/
   /************************/
@@ -7,6 +7,11 @@ window.addEventListener("load", () => {
   const canvas = document.getElementById("playfield");
   /** @type {CanvasRenderingContext2D} */
   const context = canvas.getContext("2d");
+
+  /** @type {HTMLCanvasElement} */
+  const offscreenCanvas = document.createElement("canvas");
+  /** @type {CanvasRenderingContext2D} */
+  const offscreenContext = offscreenCanvas.getContext("2d");
 
   let targetPos = { x: 2, y: 2 };
   let playerPos = { x: 7.5, y: 7.5 };
@@ -19,25 +24,26 @@ window.addEventListener("load", () => {
   let remainingShots = 0;
   let isBallStopped = true;
   let isGameRunning = true;
-  let level = 10;
+  let level = 1;
   let obstacles = [];
+  let initialRenderPass = true;
 
-  const BOUNCE = 0.9; // Bounce coefficient
-  const FRICTION = 0.7; // Normal friction
-  const BALL_RADIUS = 0.45; // Will be set in resizeCanvas
+  const BOUNCE = 0.9;
+  const FRICTION = 0.7;
+  const BALL_RADIUS = 0.45;
   const TARGET_RADIUS = 0.75;
-  const TARGET_PULL_FORCE = 21; // Force applied towards the target
-  const GRASS_FRICTION = 0.95; // Higher friction for slow speeds
-  const CRITICAL_SPEED = 2; // Speed threshold where grass friction kicks in
-  const MAX_SHOT_SPEED = 30;
-  const VELOCITY_THRESHOLD = 0.1; // Threshold for considering ball "stopped"
-  const TARGET_THRESHOLD = 0.2; // Threshold for hitting the target
-  const TRAIL_LENGTH = 50; // Number of positions to remember
-  const trailPositions = []; // Array to store previous positions
+  const TARGET_PULL_FORCE = 30;
+  const GRASS_FRICTION = 0.95;
+  const CRITICAL_SPEED = 2;
+  const MAX_SHOT_SPEED = 25;
+  const VELOCITY_THRESHOLD = 0.1;
+  const TARGET_THRESHOLD = 0.2;
+  const TRAIL_LENGTH = 42;
+  const trailPositions = [];
   const SHOT_IND_COLOR = "rgba(255, 255, 255, 0.75)";
-  const MAX_DRAG_DISTANCE = 4.2; // 5 units based on the 10x10 grid;
+  const MAX_DRAG_DISTANCE = 4.2;
   const playerImage = new Image();
-  const SHOTS_PER_LEVEL = 4;
+  const SHOTS_PER_LEVEL = 3;
   const MAX_NUM_OBSTACLES = 10;
 
   const gameOverOverlay = document.getElementById("overlay");
@@ -48,6 +54,9 @@ window.addEventListener("load", () => {
   const currentLevelDisplay = document.getElementById("current-level");
   restartButton.addEventListener("click", gameOver);
   continueButton.addEventListener("click", nextLevel);
+
+  const FRAME_RATE = 60;
+  let lastFrameTime = 0;
 
   /************************/
   /**** Initial Setup *****/
@@ -63,27 +72,32 @@ window.addEventListener("load", () => {
   /****** Game Loop *******/
   /************************/
 
-  function gameLoop() {
-    updateGame();
+  function gameLoop(currentTime) {
+    if (currentTime - lastFrameTime >= 1000 / FRAME_RATE) {
+      updateGame();
+      lastFrameTime = currentTime;
+    }
     requestAnimationFrame(gameLoop);
   }
 
   function updateGame() {
-    if (!isGameRunning) return;
+    isBallStopped =
+      Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
+      Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD;
+
+    if (
+      !isGameRunning ||
+      (!initialRenderPass && isBallStopped && !isDragging)
+    ) {
+      return; // save ressources
+    }
 
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    isBallStopped =
-      Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
-      Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD;
-
     context.clearRect(0, 0, canvas.width, canvas.height); // clear canvas
-    drawBackground();
-
-    drawTarget();
-    drawObstacles();
+    context.drawImage(offscreenCanvas, 0, 0); // draw static elements
 
     if (hasHitTarget) {
       if (playerOpacity > 0.01) {
@@ -96,7 +110,9 @@ window.addEventListener("load", () => {
         continueButton.classList.remove("hidden");
       }
     } else {
-      playerOpacity = 1.0;
+      if (playerOpacity <= 1) {
+        playerOpacity = 1;
+      }
 
       if (!isBallStopped) {
         drawTrail();
@@ -116,94 +132,100 @@ window.addEventListener("load", () => {
       }
     }
 
-    if (playerOpacity > 0) {
-      drawPlayer();
+    if (!initialRenderPass) {
+      initialRenderPass = false;
+      // wait for the player image to load
+      setTimeout(() => {
+        drawPlayer();
+      }, 500);
+    } else {
+      if (playerOpacity > 0) {
+        drawPlayer();
+      }
     }
-
-    updateRemainingShots();
-    currentLevelDisplay.textContent = "Level: " + level;
   }
 
-function generateLevel() {
-    // Randomize target position considering target radius
+  function generateLevel() {
+    // target
     const minPos = TARGET_RADIUS;
     const maxPos = 10 - TARGET_RADIUS;
     targetPos = {
-        x: minPos + Math.random() * (maxPos - minPos),
-        y: minPos + Math.random() * (maxPos - minPos),
+      x: minPos + Math.random() * (maxPos - minPos),
+      y: minPos + Math.random() * (maxPos - minPos),
     };
 
-    // Randomize player position
+    // player
     let isValidPosition = false;
 
     while (!isValidPosition) {
-        playerPos = {
-            x: Math.random() * 10,
-            y: Math.random() * 10,
-        };
+      playerPos = {
+        x: Math.random() * 10,
+        y: Math.random() * 10,
+      };
 
-        const distanceToTarget = Math.sqrt(
-            Math.pow(playerPos.x - targetPos.x, 2) +
-                Math.pow(playerPos.y - targetPos.y, 2)
-        );
+      const distanceToTarget = Math.sqrt(
+        Math.pow(playerPos.x - targetPos.x, 2) +
+          Math.pow(playerPos.y - targetPos.y, 2)
+      );
 
-        const intersectsWall =
-            playerPos.x < BALL_RADIUS ||
-            playerPos.x > 10 - BALL_RADIUS ||
-            playerPos.y < BALL_RADIUS ||
-            playerPos.y > 10 - BALL_RADIUS;
+      const intersectsWall =
+        playerPos.x < BALL_RADIUS ||
+        playerPos.x > 10 - BALL_RADIUS ||
+        playerPos.y < BALL_RADIUS ||
+        playerPos.y > 10 - BALL_RADIUS;
 
-        isValidPosition =
-            distanceToTarget >= MAX_DRAG_DISTANCE && !intersectsWall;
+      isValidPosition =
+        distanceToTarget >= MAX_DRAG_DISTANCE && !intersectsWall;
     }
 
-    // Randomize obstacles
+    // obstacles
     obstacles = [];
     const maxObstacles = Math.min(Math.floor(level / 2), MAX_NUM_OBSTACLES);
     const maxObstacleSize = Math.min(level, 5);
     for (let i = 0; i < maxObstacles; i++) {
-        let obstacle;
-        let isValidPosition = false;
+      let obstacle;
+      let isValidPosition = false;
 
-        for (let attempts = 0; attempts < 10; attempts++) {
-            const size = 1 + Math.floor(Math.random() * maxObstacleSize);
-            const isVertical = Math.random() < 0.5;
-            obstacle = {
-                x: Math.floor(Math.random() * 10),
-                y: Math.floor(Math.random() * 10),
-                width: isVertical ? 1 : size,
-                height: isVertical ? size : 1,
-            };
+      for (let attempts = 0; attempts < 10; attempts++) {
+        const size = 1 + Math.floor(Math.random() * maxObstacleSize);
+        const isVertical = Math.random() < 0.5;
+        obstacle = {
+          x: Math.floor(Math.random() * 10),
+          y: Math.floor(Math.random() * 10),
+          width: isVertical ? 1 : size,
+          height: isVertical ? size : 1,
+        };
 
-            const targetSquare = {
-                x: targetPos.x - TARGET_RADIUS,
-                y: targetPos.y - TARGET_RADIUS,
-                width: TARGET_RADIUS * 2,
-                height: TARGET_RADIUS * 2,
-            };
+        const targetSquare = {
+          x: targetPos.x - TARGET_RADIUS,
+          y: targetPos.y - TARGET_RADIUS,
+          width: TARGET_RADIUS * 2,
+          height: TARGET_RADIUS * 2,
+        };
 
-            const intersectsObstacle =
-                playerPos.x + BALL_RADIUS > obstacle.x &&
-                playerPos.x - BALL_RADIUS < obstacle.x + obstacle.width &&
-                playerPos.y + BALL_RADIUS > obstacle.y &&
-                playerPos.y - BALL_RADIUS < obstacle.y + obstacle.height;
+        const intersectsObstacle =
+          playerPos.x + BALL_RADIUS > obstacle.x &&
+          playerPos.x - BALL_RADIUS < obstacle.x + obstacle.width &&
+          playerPos.y + BALL_RADIUS > obstacle.y &&
+          playerPos.y - BALL_RADIUS < obstacle.y + obstacle.height;
 
-            isValidPosition =
-                obstacle.x + obstacle.width < targetSquare.x ||
-                obstacle.x > targetSquare.x + targetSquare.width ||
-                obstacle.y + obstacle.height < targetSquare.y ||
-                obstacle.y > targetSquare.y + targetSquare.height;
+        isValidPosition =
+          obstacle.x + obstacle.width < targetSquare.x ||
+          obstacle.x > targetSquare.x + targetSquare.width ||
+          obstacle.y + obstacle.height < targetSquare.y ||
+          obstacle.y > targetSquare.y + targetSquare.height;
 
-            if (isValidPosition && !intersectsObstacle) {
-                obstacles.push(obstacle);
-                break;
-            }
+        if (isValidPosition && !intersectsObstacle) {
+          obstacles.push(obstacle);
+          break;
         }
+      }
     }
-}
+  }
 
   function restartGame() {
     generateLevel();
+    drawStaticElements();
     playerVelocity = { x: 0, y: 0 };
     isDragging = false;
     dragPos = { x: 0, y: 0 };
@@ -214,6 +236,8 @@ function generateLevel() {
     isGameRunning = true;
     lastTime = performance.now();
     gameOverOverlay.classList.add("hidden");
+    updateRemainingShots();
+    updateLevelUI();
     requestAnimationFrame(gameLoop);
   }
 
@@ -237,7 +261,7 @@ function generateLevel() {
     );
 
     // store current position and velocity in trail array
-    trailPositions.unshift(playerPos);
+    trailPositions.unshift({ ...playerPos });
     if (trailPositions.length > TRAIL_LENGTH) {
       trailPositions.pop();
     }
@@ -246,7 +270,7 @@ function generateLevel() {
     playerPos.x += playerVelocity.x * deltaTime;
     playerPos.y += playerVelocity.y * deltaTime;
 
-    // apply friction i.e. update velocity
+    // apply friction
     const frameFriction = Math.pow(
       1 - (currentSpeed > CRITICAL_SPEED ? FRICTION : GRASS_FRICTION),
       deltaTime
@@ -320,7 +344,7 @@ function generateLevel() {
     const dy = playerPos.y - targetPos.y;
     const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
 
-    // Stop the player if the position is really close to the target
+    // handle player/target interaction
     if (distanceToTarget < TARGET_THRESHOLD) {
       hasHitTarget = true;
       playerVelocity = { x: 0, y: 0 };
@@ -350,6 +374,7 @@ function generateLevel() {
 
     // consume a shot (alcohol)
     remainingShots--;
+    updateRemainingShots();
   }
 
   /************************/
@@ -392,30 +417,30 @@ function generateLevel() {
     });
   }
 
-  function drawTarget() {
-    const canvasPos = gridToCanvas(targetPos.x, targetPos.y);
-    const radius = (TARGET_RADIUS / 10) * canvas.width;
+  function drawBackground(ctx) {
+    const tileSize = ctx.canvas.width / 10;
 
-    context.beginPath();
-    context.arc(canvasPos.x, canvasPos.y, radius, 0, Math.PI * 2);
-    context.fillStyle = "black";
-    context.fill();
-  }
+    ctx.fillStyle = "#90EE90"; // Light green
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-  function drawBackground() {
-    const tileSize = canvas.width / 10;
-
-    context.fillStyle = "#90EE90"; // Light green
-    context.fillRect(0, 0, canvas.width, canvas.height);
-
-    context.fillStyle = "#82DD82"; // Darker green
+    ctx.fillStyle = "#82DD82"; // Darker green
     for (let i = 0; i < 10; i++) {
       for (let j = 0; j < 10; j++) {
         if ((i + j) % 2 === 0) {
-          context.fillRect(i * tileSize, j * tileSize, tileSize, tileSize);
+          ctx.fillRect(i * tileSize, j * tileSize, tileSize, tileSize);
         }
       }
     }
+  }
+
+  function drawTarget(ctx) {
+    const canvasPos = gridToCanvas(targetPos.x, targetPos.y);
+    const radius = (TARGET_RADIUS / 10) * ctx.canvas.width;
+
+    ctx.beginPath();
+    ctx.arc(canvasPos.x, canvasPos.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "black";
+    ctx.fill();
   }
 
   function drawShotIndicator() {
@@ -481,18 +506,24 @@ function generateLevel() {
     context.fill();
   }
 
-function drawObstacles() {
-    context.fillStyle = "grey";
-    context.strokeStyle = "black";
-    context.lineWidth = 2;
+  function drawObstacles(ctx) {
+    ctx.fillStyle = "grey";
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
     obstacles.forEach((obstacle) => {
-        const canvasPos = gridToCanvas(obstacle.x, obstacle.y);
-        const width = (obstacle.width / 10) * canvas.width;
-        const height = (obstacle.height / 10) * canvas.height;
-        context.fillRect(canvasPos.x, canvasPos.y, width, height);
-        context.strokeRect(canvasPos.x, canvasPos.y, width, height);
+      const canvasPos = gridToCanvas(obstacle.x, obstacle.y);
+      const width = (obstacle.width / 10) * ctx.canvas.width;
+      const height = (obstacle.height / 10) * ctx.canvas.height;
+      ctx.fillRect(canvasPos.x, canvasPos.y, width, height);
+      ctx.strokeRect(canvasPos.x, canvasPos.y, width, height);
     });
-}
+  }
+
+  function drawStaticElements() {
+    drawBackground(offscreenContext);
+    drawTarget(offscreenContext);
+    drawObstacles(offscreenContext);
+  }
 
   /************************/
   /**** Input Handling ****/
@@ -540,7 +571,7 @@ function drawObstacles() {
     const touchY = (touch.clientY - rect.top) * scaleY;
     const gridPos = canvasToGrid(touchX, touchY);
 
-    handleDragStart(gridPos.x, gridPos.y);
+    handleDragStart(gridPos.x, gridPos.y, true);
   }
 
   function handleTouchMove(event) {
@@ -563,12 +594,14 @@ function drawObstacles() {
     handleDragEnd();
   }
 
-  function handleDragStart(posX, posY) {
+  function handleDragStart(posX, posY, isTouch = false) {
     const distToPlayer = Math.sqrt(
       Math.pow(posX - playerPos.x, 2) + Math.pow(posY - playerPos.y, 2)
     );
 
-    if (distToPlayer <= BALL_RADIUS) {
+    const rad = isTouch ? BALL_RADIUS * 2 : BALL_RADIUS;
+
+    if (distToPlayer <= rad) {
       isDragging = true;
       dragPos = { x: posX, y: posY };
     }
@@ -599,7 +632,13 @@ function drawObstacles() {
   /**** UI and Coords *****/
   /************************/
 
-  window.addEventListener("resize", resizeCanvas);
+  // Debounce resize event
+  let resizeTimeout;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(resizeCanvas, 200);
+  });
+
   function resizeCanvas() {
     // Calculate available space (accounting for margins)
     const margin = 100; // 50px padding on each side
@@ -610,6 +649,10 @@ function drawObstacles() {
 
     canvas.width = availableSize;
     canvas.height = availableSize;
+    offscreenCanvas.width = availableSize;
+    offscreenCanvas.height = availableSize;
+
+    drawStaticElements();
   }
 
   // Convert grid position to canvas position
@@ -648,5 +691,9 @@ function drawObstacles() {
       img.style.filter = "invert(1)";
       remainingShotsContainer.appendChild(img);
     }
+  }
+
+  function updateLevelUI() {
+    currentLevelDisplay.textContent = "Level: " + level;
   }
 });
