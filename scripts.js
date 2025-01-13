@@ -16,6 +16,9 @@ window.addEventListener("load", () => {
   let lastTime = performance.now();
   let hasHitTarget = false;
   let playerOpacity = 1.0;
+  let remainingShots = 0;
+  let isBallStopped = true;
+  let isGameRunning = true;
 
   const BOUNCE = 0.8; // Bounce coefficient
   const FRICTION = 0.7; // Normal friction
@@ -32,11 +35,21 @@ window.addEventListener("load", () => {
   const SHOT_IND_COLOR = "rgba(255, 255, 255, 0.75)";
   const MAX_DRAG_DISTANCE = 4.2; // 5 units based on the 10x10 grid;
   const playerImage = new Image();
+  const SHOTS_PER_LEVEL = 3;
+
+  const gameOverOverlay = document.getElementById("overlay");
+  const gameOverlayMessage = document.getElementById("overlay-message");
+  const restartButton = document.getElementById("restart-button");
+  const continueButton = document.getElementById("next-button");
+  const remainingShotsContainer = document.getElementById("remaining-shots");
+  restartButton.addEventListener("click", restartGame);
+  continueButton.addEventListener("click", restartGame);
 
   /************************/
   /**** Initial Setup *****/
   /************************/
 
+  remainingShots = SHOTS_PER_LEVEL;
   playerImage.src = "/assets/golf_ball.png";
   resizeCanvas();
   requestAnimationFrame(gameLoop);
@@ -57,9 +70,15 @@ window.addEventListener("load", () => {
   }
 
   function updateGame() {
+    if (!isGameRunning) return;
+
     const currentTime = performance.now();
     const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
+
+    isBallStopped =
+      Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
+      Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD;
 
     context.clearRect(0, 0, canvas.width, canvas.height); // clear canvas
     drawBackground();
@@ -67,16 +86,29 @@ window.addEventListener("load", () => {
     drawTarget();
 
     if (hasHitTarget) {
-      // fade out playerOpacity until it is 0
-      if (playerOpacity > 0) {
+      if (playerOpacity > 0.01) {
         playerOpacity -= 4.2 * deltaTime;
+      } else {
+        isGameRunning = false;
+        gameOverOverlay.classList.remove("hidden");
+        gameOverlayMessage.textContent = "Level Complete!";
+        restartButton.classList.add("hidden");
+        continueButton.classList.remove("hidden");
       }
     } else {
       playerOpacity = 1.0;
 
-      if (!isBallStopped()) {
+      if (!isBallStopped) {
         drawTrail();
         handlePhysics(deltaTime);
+      } else {
+        if (remainingShots === 0) {
+          isGameRunning = false;
+          gameOverOverlay.classList.remove("hidden");
+          gameOverlayMessage.textContent = "Game Over!";
+          restartButton.classList.remove("hidden");
+          continueButton.classList.add("hidden");
+        }
       }
 
       if (isDragging) {
@@ -87,6 +119,23 @@ window.addEventListener("load", () => {
     if (playerOpacity > 0) {
       drawPlayer();
     }
+
+    updateRemainingShots();
+  }
+
+  function restartGame() {
+    playerPos = { x: 5, y: 5 };
+    playerVelocity = { x: 0, y: 0 };
+    isDragging = false;
+    dragPos = { x: 0, y: 0 };
+    hasHitTarget = false;
+    playerOpacity = 1.0;
+    remainingShots = SHOTS_PER_LEVEL;
+    isBallStopped = true;
+    isGameRunning = true;
+    lastTime = performance.now();
+    gameOverOverlay.classList.add("hidden");
+    requestAnimationFrame(gameLoop);
   }
 
   /************************/
@@ -172,14 +221,9 @@ window.addEventListener("load", () => {
 
     // clear trail
     trailPositions.length = 0;
-  }
 
-  // determine wether the ball is slow enough to be considered stopped
-  function isBallStopped() {
-    return (
-      Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
-      Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD
-    );
+    // consume a shot (alcohol)
+    remainingShots--;
   }
 
   /************************/
@@ -330,7 +374,7 @@ window.addEventListener("load", () => {
       return;
     }
 
-    if (!isBallStopped()) return;
+    if (!isBallStopped) return;
     const coords = getCanvasCoordinates(event.clientX, event.clientY);
     handleDragStart(coords.x, coords.y);
   }
@@ -345,7 +389,7 @@ window.addEventListener("load", () => {
   }
 
   function handleTouchStart(event) {
-    if (!isBallStopped()) return;
+    if (!isBallStopped) return;
     event.preventDefault();
 
     const rect = canvas.getBoundingClientRect();
@@ -419,7 +463,7 @@ window.addEventListener("load", () => {
   window.addEventListener("resize", resizeCanvas);
   function resizeCanvas() {
     // Calculate available space (accounting for margins)
-    const margin = 80; // 40px padding on each side
+    const margin = 100; // 50px padding on each side
     const availableSize = Math.min(
       window.innerWidth - margin,
       window.innerHeight - margin
@@ -453,5 +497,17 @@ window.addEventListener("load", () => {
       (clientX - rect.left) * scaleX,
       (clientY - rect.top) * scaleY
     );
+  }
+
+  function updateRemainingShots() {
+    remainingShotsContainer.innerHTML = "";
+    for (let i = 0; i < remainingShots; i++) {
+      const img = document.createElement("img");
+      img.src = "/assets/golf_cub.png";
+      img.style.width = "30px";
+      img.style.height = "30px";
+      img.style.filter = "invert(1)";
+      remainingShotsContainer.appendChild(img);
+    }
   }
 });

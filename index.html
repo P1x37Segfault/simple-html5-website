@@ -5,12 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
-    <title>HTML5 urhrf</title>
+    <title>HTML5 Game</title>
 </head>
 
 <body>
     <div class="content">
         <canvas id="playfield"></canvas>
+        <div id="remaining-shots" class="remaining-shots"></div>
+        <div id="overlay" class="overlay hidden">
+            <div class="overlay-content">
+                <h1 id="overlay-message"></h1>
+                <button id="restart-button" class="hidden"><h1>Restart</h1></button>
+                <button id="next-button" class="hidden"><h1>Next</h1></button>
+            </div>
+        </div>
     </div>
     <script src="scripts.js"></script>
 </body>
