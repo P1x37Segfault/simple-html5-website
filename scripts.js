@@ -8,24 +8,28 @@ window.addEventListener("load", () => {
   /** @type {CanvasRenderingContext2D} */
   const context = canvas.getContext("2d");
 
-  let x = 5; // Ball position
-  let y = 5;
-  let vx = 0; // Velocity
-  let vy = 0;
+  let targetPos = { x: 2, y: 2 };
+  let playerPos = { x: 5, y: 5 };
+  let playerVelocity = { x: 0, y: 0 };
   let isDragging = false;
-  let dragEndX, dragEndY; // Renamed variables
+  let dragPos = { x: 0, y: 0 };
   let lastTime = performance.now();
+  let hasHitTarget = false;
+  let playerOpacity = 1.0;
 
   const BOUNCE = 0.8; // Bounce coefficient
   const FRICTION = 0.7; // Normal friction
   const BALL_RADIUS = 0.5; // Will be set in resizeCanvas
+  const TARGET_RADIUS = 0.75;
+  const TARGET_PULL_FORCE = 21; // Force applied towards the target
   const GRASS_FRICTION = 0.95; // Higher friction for slow speeds
   const CRITICAL_SPEED = 2; // Speed threshold where grass friction kicks in
   const MAX_SHOT_SPEED = 42;
   const VELOCITY_THRESHOLD = 0.1; // Threshold for considering ball "stopped"
+  const TARGET_THRESHOLD = 0.2; // Threshold for hitting the target
   const TRAIL_LENGTH = 50; // Number of positions to remember
   const trailPositions = []; // Array to store previous positions
-  const AIM_LINE_COLOR = "rgba(255, 255, 255, 0.75)"; // Transparency of aiming line
+  const SHOT_IND_COLOR = "rgba(255, 255, 255, 0.75)";
   const MAX_DRAG_DISTANCE = 4.2; // 5 units based on the 10x10 grid;
   const playerImage = new Image();
 
@@ -39,7 +43,6 @@ window.addEventListener("load", () => {
 
   /**
    * TODO:
-   * - add a target to aim for
    * - add obstacles to avoid
    * - add random course generation stuff
    */
@@ -55,22 +58,35 @@ window.addEventListener("load", () => {
 
   function updateGame() {
     const currentTime = performance.now();
-    const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
+    const deltaTime = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
     context.clearRect(0, 0, canvas.width, canvas.height); // clear canvas
     drawBackground();
 
-    if (!isBallStopped()) {
-      handlePhysics(deltaTime);
+    drawTarget();
+
+    if (hasHitTarget) {
+      // fade out playerOpacity until it is 0
+      if (playerOpacity > 0) {
+        playerOpacity -= 4.2 * deltaTime;
+      }
+    } else {
+      playerOpacity = 1.0;
+
+      if (!isBallStopped()) {
+        drawTrail();
+        handlePhysics(deltaTime);
+      }
+
+      if (isDragging) {
+        drawShotIndicator();
+      }
     }
 
-    if (isDragging) {
-      drawShotIndicator();
+    if (playerOpacity > 0) {
+      drawPlayer();
     }
-
-    drawPlayer();
-    updateDebugInfo();
   }
 
   /************************/
@@ -78,50 +94,69 @@ window.addEventListener("load", () => {
   /************************/
 
   function handlePhysics(deltaTime) {
-    const currentSpeed = Math.sqrt(vx * vx + vy * vy);
+    const currentSpeed = Math.sqrt(
+      playerVelocity.x * playerVelocity.x + playerVelocity.y * playerVelocity.y
+    );
 
     // store current position and velocity in trail array
-    trailPositions.unshift({ x, y, vx, vy });
+    trailPositions.unshift(playerPos);
     if (trailPositions.length > TRAIL_LENGTH) {
       trailPositions.pop();
     }
 
     // update position based on velocity
-    x += vx * deltaTime;
-    y += vy * deltaTime;
+    playerPos.x += playerVelocity.x * deltaTime;
+    playerPos.y += playerVelocity.y * deltaTime;
 
     // apply friction i.e. update velocity
     const frameFriction = Math.pow(
       1 - (currentSpeed > CRITICAL_SPEED ? FRICTION : GRASS_FRICTION),
       deltaTime
     );
-    vx *= frameFriction;
-    vy *= frameFriction;
+    playerVelocity.x *= frameFriction;
+    playerVelocity.y *= frameFriction;
 
     // force stop if very slow
     if (currentSpeed < VELOCITY_THRESHOLD) {
-      vx = 0;
-      vy = 0;
-    } else {
-      drawTrail();
+      playerVelocity = { x: 0, y: 0 };
+      trailPositions.length = 0; // clear trail
     }
 
     // handle wall collisions
-    if (x < BALL_RADIUS) {
-      x = BALL_RADIUS;
-      vx = Math.abs(vx) * BOUNCE;
+    if (playerPos.x < BALL_RADIUS) {
+      playerPos.x = BALL_RADIUS;
+      playerVelocity.x = Math.abs(playerVelocity.x) * BOUNCE;
     }
-    if (x > 10 - BALL_RADIUS) {
-      x = 10 - BALL_RADIUS;
-      vx = -Math.abs(vx) * BOUNCE;
+    if (playerPos.x > 10 - BALL_RADIUS) {
+      playerPos.x = 10 - BALL_RADIUS;
+      playerVelocity.x = -Math.abs(playerVelocity.x) * BOUNCE;
     }
-    if (y < BALL_RADIUS) {
-      y = BALL_RADIUS;
-      vy = Math.abs(vy) * BOUNCE;
+    if (playerPos.y < BALL_RADIUS) {
+      playerPos.y = BALL_RADIUS;
+      playerVelocity.y = Math.abs(playerVelocity.y) * BOUNCE;
     }
-    if (y > 10 - BALL_RADIUS) {
-      y = 10 - BALL_RADIUS;
-      vy = -Math.abs(vy) * BOUNCE;
+    if (playerPos.y > 10 - BALL_RADIUS) {
+      playerPos.y = 10 - BALL_RADIUS;
+      playerVelocity.y = -Math.abs(playerVelocity.y) * BOUNCE;
+    }
+
+    // target checks
+    const dx = playerPos.x - targetPos.x;
+    const dy = playerPos.y - targetPos.y;
+    const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
+
+    // Stop the player if the position is really close to the target
+    if (distanceToTarget < TARGET_THRESHOLD) {
+      hasHitTarget = true;
+      playerVelocity = { x: 0, y: 0 };
+      playerPos = { ...targetPos }; // snap to target
+    } else if (distanceToTarget + BALL_RADIUS < TARGET_RADIUS) {
+      playerVelocity.x += -dx * 10;
+      playerVelocity.y += -dy * 10;
+    } else if (distanceToTarget <= TARGET_RADIUS) {
+      // add some velocity towards the target
+      playerVelocity.x += -dx * TARGET_PULL_FORCE * deltaTime;
+      playerVelocity.y += -dy * TARGET_PULL_FORCE * deltaTime;
     }
   }
 
@@ -133,8 +168,7 @@ window.addEventListener("load", () => {
     const speed = power * MAX_SHOT_SPEED;
 
     // apply velocity
-    vx = normalizedDirX * speed;
-    vy = normalizedDirY * speed;
+    playerVelocity = { x: normalizedDirX * speed, y: normalizedDirY * speed };
 
     // clear trail
     trailPositions.length = 0;
@@ -143,7 +177,8 @@ window.addEventListener("load", () => {
   // determine wether the ball is slow enough to be considered stopped
   function isBallStopped() {
     return (
-      Math.abs(vx) < VELOCITY_THRESHOLD && Math.abs(vy) < VELOCITY_THRESHOLD
+      Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
+      Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD
     );
   }
 
@@ -152,10 +187,13 @@ window.addEventListener("load", () => {
   /************************/
 
   function drawPlayer() {
-    const canvasPos = gridToCanvas(x, y);
+    const canvasPos = gridToCanvas(playerPos.x, playerPos.y);
     context.save();
     context.translate(canvasPos.x, canvasPos.y);
     const radius = (BALL_RADIUS / 10) * canvas.width;
+
+    // Draw the player image with opacity
+    context.globalAlpha = playerOpacity;
     context.drawImage(playerImage, -radius, -radius, radius * 2, radius * 2);
 
     // Add black circle outline
@@ -166,6 +204,7 @@ window.addEventListener("load", () => {
     context.stroke();
 
     context.restore();
+    context.globalAlpha = 1.0; // Reset opacity for other drawings
   }
 
   function drawTrail() {
@@ -183,9 +222,35 @@ window.addEventListener("load", () => {
     });
   }
 
+  function drawTarget() {
+    const canvasPos = gridToCanvas(targetPos.x, targetPos.y);
+    const radius = (TARGET_RADIUS / 10) * canvas.width;
+
+    context.beginPath();
+    context.arc(canvasPos.x, canvasPos.y, radius, 0, Math.PI * 2);
+    context.fillStyle = "black";
+    context.fill();
+  }
+
+  function drawBackground() {
+    const tileSize = canvas.width / 10;
+
+    context.fillStyle = "#90EE90"; // Light green
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    context.fillStyle = "#82DD82"; // Darker green
+    for (let i = 0; i < 10; i++) {
+      for (let j = 0; j < 10; j++) {
+        if ((i + j) % 2 === 0) {
+          context.fillRect(i * tileSize, j * tileSize, tileSize, tileSize);
+        }
+      }
+    }
+  }
+
   function drawShotIndicator() {
-    const dx = x - dragEndX;
-    const dy = y - dragEndY;
+    const dx = playerPos.x - dragPos.x;
+    const dy = playerPos.y - dragPos.y;
     const dragDistance = Math.sqrt(dx * dx + dy * dy);
 
     if (dragDistance < BALL_RADIUS) return;
@@ -199,7 +264,7 @@ window.addEventListener("load", () => {
     const LINE_WIDTH = radius * 0.5;
 
     // draw line with gradient
-    const canvasPos = gridToCanvas(x, y);
+    const canvasPos = gridToCanvas(playerPos.x, playerPos.y);
     const gradient = context.createLinearGradient(
       canvasPos.x,
       canvasPos.y,
@@ -207,7 +272,7 @@ window.addEventListener("load", () => {
       canvasPos.y + dirY * displayLength
     );
     gradient.addColorStop(0, "rgba(255, 255, 255, 0)"); // gradient start (transparent)
-    gradient.addColorStop(1, AIM_LINE_COLOR); // gradient end
+    gradient.addColorStop(1, SHOT_IND_COLOR); // gradient end
     context.beginPath();
     context.strokeStyle = gradient;
     context.lineWidth = LINE_WIDTH;
@@ -220,7 +285,7 @@ window.addEventListener("load", () => {
 
     // draw arrow head
     const angle = Math.atan2(dirY, dirX);
-    context.fillStyle = AIM_LINE_COLOR;
+    context.fillStyle = SHOT_IND_COLOR;
     context.beginPath();
     context.moveTo(
       canvasPos.x + dirX * displayLength,
@@ -246,22 +311,6 @@ window.addEventListener("load", () => {
     context.fill();
   }
 
-  function drawBackground() {
-    const tileSize = canvas.width / 10;
-
-    context.fillStyle = "#90EE90"; // Light green
-    context.fillRect(0, 0, canvas.width, canvas.height);
-
-    context.fillStyle = "#82DD82"; // Darker green
-    for (let i = 0; i < 10; i++) {
-      for (let j = 0; j < 10; j++) {
-        if ((i + j) % 2 === 0) {
-          context.fillRect(i * tileSize, j * tileSize, tileSize, tileSize);
-        }
-      }
-    }
-  }
-
   /************************/
   /**** Input Handling ****/
   /************************/
@@ -274,6 +323,13 @@ window.addEventListener("load", () => {
   canvas.addEventListener("touchend", handleTouchEnd);
 
   function handleMouseDown(event) {
+    if (event.button !== 0) {
+      // not a left click
+      // we won´t catch the mouseup event if e.g. the ctx menu is opened
+      if (isDragging) handleDragEnd();
+      return;
+    }
+
     if (!isBallStopped()) return;
     const coords = getCanvasCoordinates(event.clientX, event.clientY);
     handleDragStart(coords.x, coords.y);
@@ -326,27 +382,25 @@ window.addEventListener("load", () => {
 
   function handleDragStart(posX, posY) {
     const distToPlayer = Math.sqrt(
-      Math.pow(posX - x, 2) + Math.pow(posY - y, 2)
+      Math.pow(posX - playerPos.x, 2) + Math.pow(posY - playerPos.y, 2)
     );
 
     if (distToPlayer <= BALL_RADIUS) {
       isDragging = true;
-      dragEndX = posX;
-      dragEndY = posY;
+      dragPos = { x: posX, y: posY };
     }
   }
 
   function handleDragMove(posX, posY) {
     if (!isDragging) return;
-    dragEndX = posX;
-    dragEndY = posY;
+    dragPos = { x: posX, y: posY };
   }
 
   function handleDragEnd() {
     if (!isDragging) return;
 
-    const dx = x - dragEndX;
-    const dy = y - dragEndY;
+    const dx = playerPos.x - dragPos.x;
+    const dy = playerPos.y - dragPos.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance < BALL_RADIUS) return;
@@ -399,14 +453,5 @@ window.addEventListener("load", () => {
       (clientX - rect.left) * scaleX,
       (clientY - rect.top) * scaleY
     );
-  }
-
-  // Debug overlay
-  const debugOverlay = document.getElementById("debug-overlay");
-  function updateDebugInfo() {
-    const posX = x.toFixed(2);
-    const posY = y.toFixed(2);
-    const velocity = Math.sqrt(vx * vx + vy * vy).toFixed(1);
-    debugOverlay.textContent = `Position: [${posX}, ${posY}], Speed: ${velocity}`;
   }
 });

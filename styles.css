@@ -1,8 +1,8 @@
 body {
+    height: 100vh;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    height: 100vh;
     background-color: black;
 }
 
@@ -13,16 +13,4 @@ body {
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
-}
-
-#debug-overlay {
-    position: fixed;
-    top: 10px;
-    width: 100%;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-    pointer-events: none;
 }
