@@ -15,28 +15,14 @@ body {
     box-sizing: border-box;
 }
 
-canvas {
-    display: block;
-    /* border: 1px solid white; */
-}
-
-#mainCanvas {
-    display: block;
-}
-
-.hidden {
-    display: none;
-}
-
 #debug-overlay {
     position: fixed;
     top: 10px;
-    left: 10px;
+    width: 100%;
+    text-align: center;
     background: rgba(0, 0, 0, 0.7);
     color: white;
-    padding: 5px 10px;
-    border-radius: 5px;
-    font-family: monospace;
+    font-family: Arial, sans-serif;
     font-size: 14px;
     pointer-events: none;
 }
