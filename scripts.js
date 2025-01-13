@@ -18,7 +18,6 @@ window.addEventListener("DOMContentLoaded", () => {
   let playerVelocity = { x: 0, y: 0 };
   let isDragging = false;
   let dragPos = { x: 0, y: 0 };
-  let lastTime = performance.now();
   let hasHitTarget = false;
   let playerOpacity = 1.0;
   let remainingShots = 0;
@@ -27,6 +26,7 @@ window.addEventListener("DOMContentLoaded", () => {
   let level = 1;
   let obstacles = [];
   let initialRenderPass = true;
+  let lastTime = performance.now();
 
   const BOUNCE = 0.9;
   const FRICTION = 0.7;
@@ -45,6 +45,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const playerImage = new Image();
   const SHOTS_PER_LEVEL = 3;
   const MAX_NUM_OBSTACLES = 10;
+  const TARGET_FRAME_RATE = 60;
 
   const gameOverOverlay = document.getElementById("overlay");
   const gameOverlayMessage = document.getElementById("overlay-message");
@@ -55,9 +56,6 @@ window.addEventListener("DOMContentLoaded", () => {
   restartButton.addEventListener("click", gameOver);
   continueButton.addEventListener("click", nextLevel);
 
-  const FRAME_RATE = 60;
-  let lastFrameTime = 0;
-
   /************************/
   /**** Initial Setup *****/
   /************************/
@@ -66,21 +64,30 @@ window.addEventListener("DOMContentLoaded", () => {
   playerImage.src = "/assets/golf_ball.png";
   restartGame();
   resizeCanvas();
-  requestAnimationFrame(gameLoop);
+  requestAnimationFrame(gameLoop); // start game loop
 
   /************************/
   /****** Game Loop *******/
   /************************/
 
   function gameLoop(currentTime) {
-    if (currentTime - lastFrameTime >= 1000 / FRAME_RATE) {
-      updateGame();
-      lastFrameTime = currentTime;
+    if(currentTime - lastTime < 500 / TARGET_FRAME_RATE ) {
+        requestAnimationFrame(gameLoop);
+        // this is kind of cursed but it works
+        // this way the framerate stays somewhat consistent at 60fps
+        return;
     }
+
+    const fps = 1000 / (currentTime - lastTime);
+    console.log(fps);
+
+    const deltaTime = (currentTime - lastTime) / 1000;
+    updateGame(deltaTime);
+    lastTime = performance.now();
     requestAnimationFrame(gameLoop);
   }
 
-  function updateGame() {
+  function updateGame(deltaTime) {
     isBallStopped =
       Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
       Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD;
@@ -91,10 +98,6 @@ window.addEventListener("DOMContentLoaded", () => {
     ) {
       return; // save ressources
     }
-
-    const currentTime = performance.now();
-    const deltaTime = (currentTime - lastTime) / 1000;
-    lastTime = currentTime;
 
     context.clearRect(0, 0, canvas.width, canvas.height); // clear canvas
     context.drawImage(offscreenCanvas, 0, 0); // draw static elements
@@ -180,7 +183,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     // obstacles
     obstacles = [];
-    const maxObstacles = Math.min(Math.floor(level / 2), MAX_NUM_OBSTACLES);
+    const maxObstacles = Math.min(Math.ceil(level - 1), MAX_NUM_OBSTACLES);
     const maxObstacleSize = Math.min(level, 5);
     for (let i = 0; i < maxObstacles; i++) {
       let obstacle;
