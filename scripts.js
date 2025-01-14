@@ -87,7 +87,7 @@ window.addEventListener("DOMContentLoaded", () => {
   toggleAimDirBtn.addEventListener("click", toggleInputDirection);
   hideTutorialBtn.addEventListener("click", hideTutorial);
   remainingShots = SHOTS_PER_LEVEL;
-  playerImage.src = "/assets/golf_ball.png";
+  playerImage.src = "./assets/golf_ball.png";
   resizeCanvas();
   restartGame();
   requestAnimationFrame(gameLoop); // start game loop
@@ -791,7 +791,7 @@ window.addEventListener("DOMContentLoaded", () => {
     remainingShotsDiv.innerHTML = "";
     for (let i = 0; i < remainingShots; i++) {
       const img = document.createElement("img");
-      img.src = "/assets/golf_cub.png";
+      img.src = "./assets/golf_cub.png";
       img.style.width = "30px";
       img.style.height = "30px";
       img.style.filter = "invert(1)";
