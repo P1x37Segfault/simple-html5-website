@@ -1,4 +1,29 @@
 window.addEventListener("DOMContentLoaded", () => {
+  // TODO:
+  // - Add a way to select level
+  // - Add a level editor (player 1x1, target is 2x2, obstacles are 1x1 and can be placed everywhere)
+  // - A level will be represented with an simple array of strings
+  // - Add function to load level
+  // - Add function to edit level (html textarea ? or smth more fancy)
+  // - Add function to save level / export level ?
+  // - this will look something like this: (P = player, T = target, X = obstacle, 0 = empty)
+  //   | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | P | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | X | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
+  //   | 0 | X | 0 | 0 | 0 | 0 | X | T | T | 0 |
+  //   | 0 | X | 0 | 0 | 0 | 0 | X | T | T | 0 |
+  //   | 0 | 0 | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 |
+  //
+  // - Create 10 levels
+  // - fix slowdown when ball is "rolling" alongside a wall / obstacle -> do not slow down when the collision is at a shallow angle
+  // - fix corner collision bug
+  // - add indicator whether the ball has stopped and a shot can be taken or NOT
+
   /************************/
   /****** Variables *******/
   /************************/
@@ -27,10 +52,11 @@ window.addEventListener("DOMContentLoaded", () => {
   let obstacles = [];
   let initialRenderPass = true;
   let lastTime = performance.now();
+  let invertAimDirection = false;
 
-  const BOUNCE = 0.9;
+  const BOUNCE = 0.95;
   const FRICTION = 0.7;
-  const BALL_RADIUS = 0.45;
+  const BALL_RADIUS = 0.42;
   const TARGET_RADIUS = 0.75;
   const TARGET_PULL_FORCE = 30;
   const GRASS_FRICTION = 0.95;
@@ -46,20 +72,28 @@ window.addEventListener("DOMContentLoaded", () => {
   const SHOTS_PER_LEVEL = 3;
   const MAX_NUM_OBSTACLES = 10;
   const TARGET_FRAME_RATE = 60;
+  const PLAYER_FADEOUT_SPEED = 4.2;
+  const CANVAS_MARGIN = 50;
 
   const gameOverOverlay = document.getElementById("overlay");
   const gameOverlayMessage = document.getElementById("overlay-message");
   const restartButton = document.getElementById("restart-button");
+  const restartGameButton = document.getElementById("restart-game");
   const continueButton = document.getElementById("next-button");
   const remainingShotsContainer = document.getElementById("remaining-shots");
   const currentLevelDisplay = document.getElementById("current-level");
-  restartButton.addEventListener("click", gameOver);
-  continueButton.addEventListener("click", nextLevel);
-
+  const toggleAimDirectionButton = document.getElementById(
+    "toggle-aim-direction"
+  );
+  
   /************************/
   /**** Initial Setup *****/
   /************************/
-
+  
+  restartButton.addEventListener("click", gameOver);
+  restartGameButton.addEventListener("click", gameOver);
+  continueButton.addEventListener("click", nextLevel);
+  toggleAimDirectionButton.addEventListener("click", toggleInputDirection);
   remainingShots = SHOTS_PER_LEVEL;
   playerImage.src = "/assets/golf_ball.png";
   restartGame();
@@ -71,15 +105,12 @@ window.addEventListener("DOMContentLoaded", () => {
   /************************/
 
   function gameLoop(currentTime) {
-    if(currentTime - lastTime < 500 / TARGET_FRAME_RATE ) {
-        requestAnimationFrame(gameLoop);
-        // this is kind of cursed but it works
-        // this way the framerate stays somewhat consistent at 60fps
-        return;
+    if (currentTime - lastTime < 500 / TARGET_FRAME_RATE) {
+      requestAnimationFrame(gameLoop);
+      // this is kind of cursed but it works
+      // this way the framerate stays somewhat consistent at 60fps
+      return;
     }
-
-    const fps = 1000 / (currentTime - lastTime);
-    console.log(fps);
 
     const deltaTime = (currentTime - lastTime) / 1000;
     updateGame(deltaTime);
@@ -88,9 +119,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateGame(deltaTime) {
-    isBallStopped =
-      Math.abs(playerVelocity.x) < VELOCITY_THRESHOLD &&
-      Math.abs(playerVelocity.y) < VELOCITY_THRESHOLD;
+    isBallStopped = playerVelocity.x == 0 && playerVelocity.y == 0;
 
     if (
       !isGameRunning ||
@@ -104,11 +133,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (hasHitTarget) {
       if (playerOpacity > 0.01) {
-        playerOpacity -= 4.2 * deltaTime;
+        playerOpacity -= PLAYER_FADEOUT_SPEED * deltaTime;
       } else {
         isGameRunning = false;
         gameOverOverlay.classList.remove("hidden");
-        gameOverlayMessage.textContent = "Level " + level + " Complete!";
+        gameOverlayMessage.textContent = "Level Complete!";
         restartButton.classList.add("hidden");
         continueButton.classList.remove("hidden");
       }
@@ -150,11 +179,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function generateLevel() {
     // target
-    const minPos = TARGET_RADIUS;
-    const maxPos = 10 - TARGET_RADIUS;
     targetPos = {
-      x: minPos + Math.random() * (maxPos - minPos),
-      y: minPos + Math.random() * (maxPos - minPos),
+      x: 1 + Math.floor(Math.random() * 9),
+      y: 1 + Math.floor(Math.random() * 9),
     };
 
     // player
@@ -162,8 +189,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
     while (!isValidPosition) {
       playerPos = {
-        x: Math.random() * 10,
-        y: Math.random() * 10,
+        x: 0.5 + Math.floor(Math.random() * 9),
+        y: 0.5 + Math.floor(Math.random() * 9),
       };
 
       const distanceToTarget = Math.sqrt(
@@ -447,8 +474,15 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function drawShotIndicator() {
-    const dx = playerPos.x - dragPos.x;
-    const dy = playerPos.y - dragPos.y;
+    let dx, dy;
+    if (invertAimDirection) {
+      dx = dragPos.x - playerPos.x;
+      dy = dragPos.y - playerPos.y;
+    } else {
+      dx = playerPos.x - dragPos.x;
+      dy = playerPos.y - dragPos.y;
+    }
+
     const dragDistance = Math.sqrt(dx * dx + dy * dy);
 
     if (dragDistance < BALL_RADIUS) return;
@@ -594,7 +628,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function handleTouchEnd(event) {
     event.preventDefault();
-    handleDragEnd();
+    handleDragEnd(true);
   }
 
   function handleDragStart(posX, posY, isTouch = false) {
@@ -602,9 +636,10 @@ window.addEventListener("DOMContentLoaded", () => {
       Math.pow(posX - playerPos.x, 2) + Math.pow(posY - playerPos.y, 2)
     );
 
-    const rad = isTouch ? BALL_RADIUS * 2 : BALL_RADIUS;
+    // bigger hitbox for touch
+    const detectHitRadius = isTouch ? BALL_RADIUS * 2 : BALL_RADIUS;
 
-    if (distToPlayer <= rad) {
+    if (distToPlayer <= detectHitRadius) {
       isDragging = true;
       dragPos = { x: posX, y: posY };
     }
@@ -615,14 +650,27 @@ window.addEventListener("DOMContentLoaded", () => {
     dragPos = { x: posX, y: posY };
   }
 
-  function handleDragEnd() {
+  function handleDragEnd(isTouch = false) {
     if (!isDragging) return;
 
-    const dx = playerPos.x - dragPos.x;
-    const dy = playerPos.y - dragPos.y;
+    // bigger hitbox for touch
+    const detectHitRadius = isTouch ? BALL_RADIUS * 2 : BALL_RADIUS;
+
+    let dx, dy;
+    if (invertAimDirection) {
+      dx = dragPos.x - playerPos.x;
+      dy = dragPos.y - playerPos.y;
+    } else {
+      dx = playerPos.x - dragPos.x;
+      dy = playerPos.y - dragPos.y;
+    }
+
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance < BALL_RADIUS) return;
+    if (distance < detectHitRadius) {
+      isDragging = false;
+      return;
+    }
 
     const normalizedDistance = Math.min(distance, MAX_DRAG_DISTANCE);
     const power = normalizedDistance / MAX_DRAG_DISTANCE;
@@ -635,7 +683,7 @@ window.addEventListener("DOMContentLoaded", () => {
   /**** UI and Coords *****/
   /************************/
 
-  // Debounce resize event
+  // debounce resize event
   let resizeTimeout;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimeout);
@@ -643,11 +691,18 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   function resizeCanvas() {
-    // Calculate available space (accounting for margins)
-    const margin = 100; // 50px padding on each side
+    let vw = Math.max(
+      document.documentElement.clientWidth || 0,
+      window.innerWidth || 0
+    );
+    let vh = Math.max(
+      document.documentElement.clientHeight || 0,
+      window.innerHeight || 0
+    );
+
     const availableSize = Math.min(
-      window.innerWidth - margin,
-      window.innerHeight - margin
+      vw - 2 * CANVAS_MARGIN,
+      vh - 2 * CANVAS_MARGIN
     );
 
     canvas.width = availableSize;
@@ -694,6 +749,10 @@ window.addEventListener("DOMContentLoaded", () => {
       img.style.filter = "invert(1)";
       remainingShotsContainer.appendChild(img);
     }
+  }
+
+  function toggleInputDirection() {
+    invertAimDirection = !invertAimDirection;
   }
 
   function updateLevelUI() {

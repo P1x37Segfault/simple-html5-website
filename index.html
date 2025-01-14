@@ -5,21 +5,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="styles.css">
-    <title>HTML5 Game</title>
+    <title>HTML5 Game by urhrf</title>
 </head>
 
 <body>
-    <div class="content">
+    <div class="game">
         <canvas id="playfield"></canvas>
-        <div id="remaining-shots" class="remaining-shots"></div>
-        <div id="current-level" class="current-level"></div>
+    </div>
+    <div class="content">
         <div id="overlay" class="overlay hidden">
             <div class="overlay-content">
                 <h1 id="overlay-message"></h1>
-                <button id="restart-button" class="hidden"><h1>Restart</h1></button>
-                <button id="next-button" class="hidden"><h1>Next</h1></button>
+                <button id="restart-button" class="hidden">
+                    <h1>Restart</h1>
+                </button>
+                <button id="next-button" class="hidden">
+                    <h1>Next</h1>
+                </button>
             </div>
         </div>
+        <div id="remaining-shots" class="remaining-shots"></div>
+        <div id="current-level" class="current-level"></div>
+        <button id="toggle-aim-direction" class="toggle-aim-direction">
+            <span>⇅</span>
+        </button>
+        <button id="restart-game" class="restart-game">
+            <span>↺</span>
+        </button>
     </div>
     <script src="scripts.js"></script>
 </body>
