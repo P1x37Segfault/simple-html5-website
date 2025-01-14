@@ -13,6 +13,39 @@
         <canvas id="playfield"></canvas>
     </div>
     <div class="content">
+        <div id="tutorial-overlay" class="overlay hidden">
+            <div class="overlay-content">
+                <h1>How to play</h1>
+                <p>
+                    Click and drag the ball to aim, release to shoot!
+                    <br>
+                    <br>
+                    Hit the target to advance to the next level.
+                </p>
+                UI elements:
+                <ul>
+                    <li>
+                        <span>top left:</span>
+                        <span>current level</span>
+                    </li>
+                    <li>
+                        <span>top right:</span>
+                        <span>remaining shots</span>
+                    </li>
+                    <li>
+                        <span>bottom left:</span>
+                        <span>restart game</span>
+                    </li>
+                    <li>
+                        <span>bottom right:</span>
+                        <span>toggle aim behaviour</span>
+                    </li>
+                </ul>
+                <button id="hide-tutorial" class="hide-tutorial">
+                    <h1>Let´s Go</h1>
+                </button>
+            </div>
+        </div>
         <div id="overlay" class="overlay hidden">
             <div class="overlay-content">
                 <h1 id="overlay-message"></h1>

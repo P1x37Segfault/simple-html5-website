@@ -1,28 +1,16 @@
 window.addEventListener("DOMContentLoaded", () => {
-  // TODO:
-  // - Add a way to select level
-  // - Add a level editor (player 1x1, target is 2x2, obstacles are 1x1 and can be placed everywhere)
-  // - A level will be represented with an simple array of strings
-  // - Add function to load level
-  // - Add function to edit level (html textarea ? or smth more fancy)
-  // - Add function to save level / export level ?
-  // - this will look something like this: (P = player, T = target, X = obstacle, 0 = empty)
-  //   | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | P | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | X | 0 | 0 | X | 0 | 0 | 0 | 0 | 0 |
-  //   | 0 | X | 0 | 0 | 0 | 0 | X | T | T | 0 |
-  //   | 0 | X | 0 | 0 | 0 | 0 | X | T | T | 0 |
-  //   | 0 | 0 | 0 | 0 | 0 | 0 | X | 0 | 0 | 0 |
-  //
-  // - Create 10 levels
-  // - fix slowdown when ball is "rolling" alongside a wall / obstacle -> do not slow down when the collision is at a shallow angle
-  // - fix corner collision bug
-  // - add indicator whether the ball has stopped and a shot can be taken or NOT
+  // Potential features one could add:
+  // - add sound effects and music
+  // - add some nice visual effects (when scoring, hitting obstacles, etc.)
+  // - level-editor
+  //    - create format to save and load a level
+  //    - add UI to load, create, edit and save levels
+  // - improve physics
+  //    - ball-obstacle collision arround convex corners is buggy
+  //    - some ball-wall interactions are unrealistic (ball sometimes loses all velocity)
+  // - make the game more challenging
+  //    - add more complex obstacles (slopes, ramps, different obstacle shapes, etc.)
+  //    - add different surfaces with different friction (ice, sand, etc.)
 
   /************************/
   /****** Variables *******/
@@ -53,6 +41,8 @@ window.addEventListener("DOMContentLoaded", () => {
   let initialRenderPass = true;
   let lastTime = performance.now();
   let invertAimDirection = false;
+  let animationAngle = 0;
+  let hasSeenTutorial = false;
 
   const BOUNCE = 0.95;
   const FRICTION = 0.7;
@@ -74,31 +64,65 @@ window.addEventListener("DOMContentLoaded", () => {
   const TARGET_FRAME_RATE = 60;
   const PLAYER_FADEOUT_SPEED = 4.2;
   const CANVAS_MARGIN = 50;
+  const ANIMATION_ROTATION_SPEED = 0.5;
 
+  const tutorialOverlay = document.getElementById("tutorial-overlay");
+  const hideTutorialBtn = document.getElementById("hide-tutorial");
   const gameOverOverlay = document.getElementById("overlay");
-  const gameOverlayMessage = document.getElementById("overlay-message");
-  const restartButton = document.getElementById("restart-button");
-  const restartGameButton = document.getElementById("restart-game");
-  const continueButton = document.getElementById("next-button");
-  const remainingShotsContainer = document.getElementById("remaining-shots");
+  const gameOverlayMsg = document.getElementById("overlay-message");
+  const restartBtn = document.getElementById("restart-button");
+  const restartGameBtn = document.getElementById("restart-game");
+  const continueBtn = document.getElementById("next-button");
+  const remainingShotsDiv = document.getElementById("remaining-shots");
   const currentLevelDisplay = document.getElementById("current-level");
-  const toggleAimDirectionButton = document.getElementById(
-    "toggle-aim-direction"
-  );
-  
+  const toggleAimDirBtn = document.getElementById("toggle-aim-direction");
+
   /************************/
   /**** Initial Setup *****/
   /************************/
-  
-  restartButton.addEventListener("click", gameOver);
-  restartGameButton.addEventListener("click", gameOver);
-  continueButton.addEventListener("click", nextLevel);
-  toggleAimDirectionButton.addEventListener("click", toggleInputDirection);
+
+  restartBtn.addEventListener("click", gameOver);
+  restartGameBtn.addEventListener("click", gameOver);
+  continueBtn.addEventListener("click", nextLevel);
+  toggleAimDirBtn.addEventListener("click", toggleInputDirection);
+  hideTutorialBtn.addEventListener("click", hideTutorial);
   remainingShots = SHOTS_PER_LEVEL;
   playerImage.src = "/assets/golf_ball.png";
-  restartGame();
   resizeCanvas();
+  restartGame();
   requestAnimationFrame(gameLoop); // start game loop
+  loadLocalStorage();
+  showTutorial();
+
+  function loadLocalStorage() {
+    if (localStorage.getItem("hasSeenTutorial") !== null) {
+      const timestamp = localStorage.getItem("hasSeenTutorial");
+      const currentTime = new Date().getTime();
+
+      // if the tutorial was seen more than 24 hours ago, show it again
+      const oneDayInMilliseconds = 24 * 60 * 60 * 1000;
+      if (currentTime - timestamp > oneDayInMilliseconds) {
+        hasSeenTutorial = false;
+      } else {
+        hasSeenTutorial = true;
+      }
+
+      hasSeenTutorial = true;
+    } else {
+      hasSeenTutorial = false;
+    }
+  }
+
+  function showTutorial() {
+    if (hasSeenTutorial) return;
+    tutorialOverlay.classList.remove("hidden");
+  }
+
+  function hideTutorial() {
+    localStorage.setItem("hasSeenTutorial", new Date().getTime());
+    hasSeenTutorial = true;
+    tutorialOverlay.classList.add("hidden");
+  }
 
   /************************/
   /****** Game Loop *******/
@@ -121,11 +145,8 @@ window.addEventListener("DOMContentLoaded", () => {
   function updateGame(deltaTime) {
     isBallStopped = playerVelocity.x == 0 && playerVelocity.y == 0;
 
-    if (
-      !isGameRunning ||
-      (!initialRenderPass && isBallStopped && !isDragging)
-    ) {
-      return; // save ressources
+    if (!isGameRunning) {
+      return; // save some ressources
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height); // clear canvas
@@ -137,9 +158,9 @@ window.addEventListener("DOMContentLoaded", () => {
       } else {
         isGameRunning = false;
         gameOverOverlay.classList.remove("hidden");
-        gameOverlayMessage.textContent = "Level Complete!";
-        restartButton.classList.add("hidden");
-        continueButton.classList.remove("hidden");
+        gameOverlayMsg.textContent = "Level Complete!";
+        restartBtn.classList.add("hidden");
+        continueBtn.classList.remove("hidden");
       }
     } else {
       if (playerOpacity <= 1) {
@@ -153,14 +174,16 @@ window.addEventListener("DOMContentLoaded", () => {
         if (remainingShots === 0) {
           isGameRunning = false;
           gameOverOverlay.classList.remove("hidden");
-          gameOverlayMessage.textContent = "Game Over!";
-          restartButton.classList.remove("hidden");
-          continueButton.classList.add("hidden");
+          gameOverlayMsg.textContent = "Game Over!";
+          restartBtn.classList.remove("hidden");
+          continueBtn.classList.add("hidden");
         }
       }
 
       if (isDragging) {
         drawShotIndicator();
+      } else if (isBallStopped) {
+        drawReadyAnimation(deltaTime);
       }
     }
 
@@ -189,8 +212,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
     while (!isValidPosition) {
       playerPos = {
-        x: 0.5 + Math.floor(Math.random() * 9),
-        y: 0.5 + Math.floor(Math.random() * 9),
+        x: 1.5 + Math.floor(Math.random() * 8),
+        y: 1.5 + Math.floor(Math.random() * 8),
       };
 
       const distanceToTarget = Math.sqrt(
@@ -278,6 +301,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function gameOver() {
     level = 1;
+    let isAlreadyRotated = restartGameBtn.classList.contains("rotated");
+    restartGameBtn.classList.toggle("rotated");
+    restartGameBtn.children[0].textContent = isAlreadyRotated ? "↻" : "↺";
     restartGame();
   }
 
@@ -430,6 +456,28 @@ window.addEventListener("DOMContentLoaded", () => {
 
     context.restore();
     context.globalAlpha = 1.0; // Reset opacity for other drawings
+  }
+
+  function drawReadyAnimation(deltaTime) {
+    const canvasPos = gridToCanvas(playerPos.x, playerPos.y);
+    const radius = (0.55 / 10) * canvas.width; // Slightly larger radius for the dashed line
+    const circumference = 2 * Math.PI * radius;
+    const segmentLength = circumference / 20;
+
+    context.save();
+    context.translate(canvasPos.x, canvasPos.y);
+    context.rotate(animationAngle);
+
+    context.beginPath();
+    // draws a dashed circle with 10 segments equally spaced
+    context.setLineDash([segmentLength, segmentLength]);
+    context.arc(0, 0, radius, 0, Math.PI * 2);
+    context.strokeStyle = "black";
+    context.lineWidth = radius * 0.1;
+    context.stroke();
+
+    context.restore();
+    animationAngle += (deltaTime * ANIMATION_ROTATION_SPEED * Math.PI) / 2;
   }
 
   function drawTrail() {
@@ -740,19 +788,20 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateRemainingShots() {
-    remainingShotsContainer.innerHTML = "";
+    remainingShotsDiv.innerHTML = "";
     for (let i = 0; i < remainingShots; i++) {
       const img = document.createElement("img");
       img.src = "/assets/golf_cub.png";
       img.style.width = "30px";
       img.style.height = "30px";
       img.style.filter = "invert(1)";
-      remainingShotsContainer.appendChild(img);
+      remainingShotsDiv.appendChild(img);
     }
   }
 
   function toggleInputDirection() {
     invertAimDirection = !invertAimDirection;
+    toggleAimDirBtn.classList.toggle("rotated");
   }
 
   function updateLevelUI() {

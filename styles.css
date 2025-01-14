@@ -55,7 +55,7 @@ body {
 .overlay-content {
     text-align: center;
     color: white;
-    background-color: rgba(0, 0, 0, 0.42);
+    background-color: rgba(0, 0, 0, 0.72);
     border-radius: 15px;
     padding: 15px 5px;
     display: flex;
@@ -111,4 +111,24 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    transition: transform 0.3s ease;
+}
+
+.toggle-aim-direction.rotated {
+    transform: rotate(180deg);
+}
+
+.restart-game.rotated {
+    transform: rotate(-360deg);
+}
+
+#tutorial-overlay > .overlay-content {
+    padding: 10px;
+}
+
+#tutorial-overlay ul {
+    margin: 0;
+    list-style-type: none;
+    padding: 0;
+    width: 100%;
 }
